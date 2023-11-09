@@ -1,0 +1,46 @@
+---
+title: "2023MCS120010_MiniProject"
+author: "2023MCS120010_PVasanthaselvi"
+date: "10/26/2023"
+output: html_document
+---
+
+## Objectives
+1. Understanding the correlation between population growth in cities vs air quality
+2. Understanding the correlation between death rate  and Air quality
+3. Understanding the correlation between disease growth and Air quality
+4. Correlation between airquality vs temperature
+4. Building model to predict the air quality based on populating growth
+5. Predicting air quality for a given year, month and day
+
+
+
+```{r}
+knit_print.data.frame = function(x, ...) {
+  res = rmarkdown::paged_table(x)
+  rmarkdown:::knit_print.data.frame(res)
+}
+
+registerS3method(
+  "knit_print", "data.frame", knit_print.data.frame,
+  envir = asNamespace("knitr")
+)
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Preliminary analysis
+
+
+## Detailed analysis
+
+
+
+## Outcomes
+
+
+
+## Results and Discussions
