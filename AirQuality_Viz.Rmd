@@ -6,14 +6,14 @@ output: html_document
 ---
 
 ## Objectives
-1. Understanding the correlation between population growth in cities vs air quality
-2. Understanding the correlation between death rate  and Air quality
-3. Understanding the correlation between disease growth and Air quality
-4. Correlation between airquality vs temperature
-4. Building model to predict the air quality based on populating growth
-5. Predicting air quality for a given year, month and day
-
-
+1. Analysis of key pollutants data to see if the dataset confirms to Benford's law to ensure naturalness and quality of dataset
+2. Analysis and comparison of 6 year (2015-2020) Air quality Index  for 5 major cities
+3. Understanding the correlation between airquality parameters with temperature and precipitation
+4. Analysis of Air quality and temperature through out the day and identify the peaks
+5. Analysis of Airquality of Ahmadabad and different districts over different months for 6 year period
+6. Impact of tree population on the Airquality for Ahmedabad
+7. Understanding the correlation between pollutants and tree population
+8. Predicting air quality for a given year, month and day 
 
 ```{r}
 knit_print.data.frame = function(x, ...) {
@@ -32,7 +32,191 @@ registerS3method(
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Preliminary analysis
+# Preliminary analysis
+The preliminary analysis involves loading, inspection and cleaning of the Air quality and weather datasets. As part of this activity, primary inspection conducted on the data set to understand the different variables, types and missing information based on visual and numerical analysis. Data cleaning is performed to remove unusable data entries/rows with incomplete cases or missing data.Further performs various operations to create clean, reduced or combined data set for further analysis. 
+```{r}
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(stringr)
+library(lubridate)
+```
+## Exploratory Analysis of city_day.csv dataset
+
+```{r}
+city_day<-read.csv("./Datasets/Air_Quality/city_day.csv")
+#city_day
+head(city_day)
+summary(city_day)
+#glimpse(city_day)
+#str(city_day)
+nrow(city_day)
+ncol(city_day)
+city_day <- replace(city_day, city_day=="", NA)
+cd_na_total_per <-data.frame(colname = names(city_day),Total_NAs = colSums(is.na(city_day)), "PerctOfNAs" = colSums((is.na(city_day)/sum(is.na(city_day)) * 100)))
+cd_na_total_per
+ggplot(cd_na_total_per, aes(x=colname, y=PerctOfNAs))+geom_col() 
+
+maxna <-max(rowSums(is.na(city_day)))
+cd_rowswithmaxna<-subset(city_day, rowSums(is.na(city_day)) == maxna)
+#cd_rowswithmorena
+head(cd_rowswithmaxna)
+city_day<-subset(city_day, rowSums(is.na(city_day)) != maxna)
+#city_day
+city_day[58,]
+sum(is.na(city_day[58,]))
+cd_rowswithonlyna<-sum(rowSums(is.na(city_day)) == 14)
+cd_rowswithonlyna
+head(city_day)
+city_day <- replace(city_day, city_day=="", NA)%>%drop_na(AQI_Bucket)
+city_day$AQI_Bucket <- as.factor(city_day$AQI_Bucket)
+city_day$Date <- as.Date(city_day$Date)
+#str(city_day)
+summary(city_day)
+
+dropcol<-c("PM10", "Toluene", "Benzene", "Xylene")#, "NH3")
+#city_day<-city_day[,dropcol,drop=FALSE]
+city_day<-subset(city_day, select=-c(PM10, Toluene, Benzene, Xylene))#, NH3))
+head(city_day)
+```
+With the initial glimpse on the city air quality data the following characteristics and anomalies were observed. The dataset contains different Indian cities Air pollutant information, air quality index and air quality bucket or index from year 2015 to 2020. The summary indicates there are incomplete or missing variable values through out the dataset and across different columns.The rows with maximum number of NAs has only the date and city name, those rows may not be useful and can be removed.
+AQI_Bucket has categorical variable and has missing values in various rows and that is not filled with NA and is of type character.The missing information is in different columns but it has useful measurements or values in other rows.This required further analysis if those rows can be dropped or retained. There are rows with AQI and AQI_Bucket but missing values in certain columns, those rows can be retained considering there could be correlated information but with row not have AQI and AQI_Bucket can be considered for dropping.The missing values or null strings can be filled with NA and AQI_Bucket type can be converted to factor. Dropping columns or variables higher than 10% and the variables not required for analysis. Based on this dropping columns PM10, Benzene, Toluene and Xylene.
+
+
+The analysis will only focus on major cities ie Ahmedabad, Chennai, Bhubaneswar, Bengaluru, Delhi, Mumbai and Rajastan. The following dataset processing will focus to extract data only for the interested cities
+
+```{r}
+major_city_day<-city_day%>%filter(City %in% c("Ahmedabad", "Chennai",  "Bengaluru", "Delhi","Mumbai"))
+summary(major_city_day)
+unique(city_day$City)
+unique(major_city_day$City)
+```
+## Checking Benfordness of the data set to see if the dataset is complete and usable for analyes
+Benfordness is checked without using Benford.analyis package instead used only basic functions from packages covered under course
+```{r}
+firstDigit<-function(x){
+ str_extract(x, "[123456789]")
+}
+major_city_day
+major_city_day_first_digit = apply(major_city_day, 1, firstDigit)
+head(major_city_day_first_digit)
+#first_digit_counts <- as.vector(table(first.digit))
+#first_digit_counts
+```
+
+
+```{r}
+city_day_monthwise<-major_city_day%>%group_by(City, year=year(Date), month = month(Date))%>%summarise(across(c(seq(3:13)), mean, na.rm=TRUE))
+city_day_monthwise
+city_day_monthwise_201819<-city_day_monthwise%>%filter((year==2019) | (year == 2018))
+city_day_monthwise_201819
+ggplot(city_day_monthwise, aes(x=month, y=AQI, color=factor(year))) + geom_line() + facet_wrap(~City) + scale_x_continuous(name ="month", breaks = seq(1, 12, 1))
+
+city_day_yearwise<-major_city_day%>%group_by(City, year=year(Date))%>%summarise(across(c(seq(3:13)), mean, na.rm=TRUE))%>%filter(City %in% c("Ahmedabad", "Chennai", "Bengaluru", "Delhi","Mumbai"))
+city_day_yearwise
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=PM2.5, color="PM2.5")) + facet_wrap(~City, nrow=5)
+
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=NO, color="NO")) + geom_line(aes(y=NO2, color="NO2")) + geom_line(aes(y=NOx, color="NOx"))+ facet_wrap(~City, nrow=5)
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=SO2, color="SO2")) + facet_wrap(~City, nrow=5)
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=CO, color="CO")) + facet_wrap(~City, nrow=5)
+
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=O3, color="O3")) + facet_wrap(~City, nrow=5)
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=NH3, color="NH3", na.rm=TRUE)) + facet_wrap(~City, nrow=5)
+
+```
+
+
+```{r}
+city_hour<-read.csv("./Datasets/Air_Quality/city_hour.csv")
+city_hour
+head(city_hour)
+summary(city_hour)
+maxna <-max(rowSums(is.na(city_hour)))
+cd_rowswithmaxna<-subset(city_hour, rowSums(is.na(city_hour)) == maxna)
+#cd_rowswithmorena
+head(cd_rowswithmaxna)
+city_hour<-subset(city_hour, rowSums(is.na(city_hour)) != maxna)
+#city_hour
+head(city_hour)
+city_hour <- replace(city_hour, city_hour=="", NA)%>% drop_na(AQI_Bucket)
+city_hour$AQI_Bucket <- as.factor(city_hour$AQI_Bucket)
+#str(city_hour)
+summary(city_hour)
+head(city_hour)
+tail(city_hour)
+```
+
+```{r}
+station_day<-read.csv("./Datasets/Air_Quality/station_day.csv")
+nrow(station_day)
+ncol(station_day)
+head(station_day)
+summary(station_day)
+maxna <-max(rowSums(is.na(station_day)))
+cd_rowswithmaxna<-subset(station_day, rowSums(is.na(station_day)) == maxna)
+#cd_rowswithmorena
+head(cd_rowswithmaxna)
+station_day<-subset(city_hour, rowSums(is.na(station_day)) != maxna)
+#station_day
+head(station_day)
+station_day <- replace(station_day, station_day=="", NA)%>% drop_na(AQI_Bucket)
+station_day$AQI_Bucket <- as.factor(station_day$AQI_Bucket)
+#str(station_day)
+summary(station_day)
+head(station_day)
+tail(station_day)
+
+```
+
+
+```{r}
+station_hour<-read.csv("./Datasets/Air_Quality/station_hour.csv")
+head(station_hour)
+summary(station_hour)
+maxna <-max(rowSums(is.na(station_hour)))
+cd_rowswithmaxna<-subset(station_hour, rowSums(is.na(station_hour)) == maxna)
+#cd_rowswithmorena
+head(cd_rowswithmaxna)
+station_hour<-subset(city_hour, rowSums(is.na(station_hour)) != maxna)
+#station_hour
+head(station_hour)
+station_hour <- replace(station_hour, station_hour=="", NA)%>% drop_na(AQI_Bucket)
+station_hour$AQI_Bucket <- as.factor(station_hour$AQI_Bucket)
+#str(station_hour)
+summary(station_hour)
+head(station_hour)
+tail(station_hour)
+```
+
+
+```{r}
+stations<-read.csv("./Datasets/Air_Quality/stations.csv")
+head(stations)
+summary(stations)
+```
+
+```{r}
+blr_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Bangalore_1990_2022_BangaloreCity.csv")
+head(blr_wthr)
+chn_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Chennai_1990_2022_Madras.csv")
+head(chn_wthr)
+dlhi_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Delhi_NCR_1990_2022_Safdarjung.csv")
+head(dlhi_wthr)
+lucknw_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Lucknow_1990_2022.csv")
+head(lucknw_wthr)
+mum_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Mumbai_1990_2022_Santacruz.csv")
+head(mum_wthr)
+geo_data<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Station_GeoLocation_Longitute_Latitude_Elevation_EPSG_4326.csv")
+head(geo_data)
+bhu_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/weather_Bhubhneshwar_1990_2022.csv")
+head(bhu_wthr)
+rourkela_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/weather_Rourkela_2021_2022.csv")
+head(rourkela_wthr)
+rajas_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Rajasthan_1990_2022_Jodhpur.csv")
+head(rajas_wthr)
+```
+
 
 
 ## Detailed analysis
