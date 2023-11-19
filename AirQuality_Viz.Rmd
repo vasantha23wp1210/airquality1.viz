@@ -6,8 +6,8 @@ output: html_document
 ---
 
 ## Objectives
-1. Analysis of key pollutants data to see if the dataset confirms to Benford's law to ensure naturalness and quality of dataset
-2. Analysis and comparison of 6 year (2015-2020) Air quality Index  for 5 major cities
+1. Analysis and comparison of 6 year (2015-2020) Air quality Index  for 5 major cities
+2. Analysis of key pollutants data to see if the dataset confirms to Benford's law to ensure naturalness and quality of dataset
 3. Understanding the correlation between airquality parameters with temperature and precipitation
 4. Analysis of Air quality and temperature through out the day and identify the peaks
 5. Analysis of Airquality of Ahmadabad and different districts over different months for 6 year period
@@ -33,7 +33,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Preliminary analysis
-The preliminary analysis involves loading, inspection and cleaning of the Air quality and weather datasets. As part of this activity, primary inspection conducted on the data set to understand the different variables, types and missing information based on visual and numerical analysis. Data cleaning is performed to remove unusable data entries/rows with incomplete cases or missing data.Further performs various operations to create clean, reduced or combined data set for further analysis. 
+The preliminary analysis involves loading, inspection and cleaning of the Air quality and weather datasets. As part of this activity, primary inspection conducted on the data set to understand the different variables, types and missing information based on visual and numerical analysis. Data cleaning is performed to remove unusable data entries/rows with incomplete cases or missing data.Further various operations performed to create clean, reduced or combined data set for further analysis. 
 ```{r}
 library(dplyr)
 library(tidyr)
@@ -41,11 +41,33 @@ library(lubridate)
 library(ggplot2)
 library(stringr)
 library(lubridate)
+library(leaflet)
+library(lazyeval)
+library(mosaic)
+library(mosaicData)
+install.packages("Datasets/statisticalModeling_0.3.0.tar.gz", repos = NULL, type = "source")
+library(statisticalModeling)
 ```
-## Exploratory Analysis of city_day.csv dataset
-
 ```{r}
 city_day<-read.csv("./Datasets/Air_Quality/city_day.csv")
+city_hour<-read.csv("./Datasets/Air_Quality/city_hour.csv")
+station_day<-read.csv("./Datasets/Air_Quality/station_day.csv")
+station_hour<-read.csv("./Datasets/Air_Quality/station_hour.csv")
+stations<-read.csv("./Datasets/Air_Quality/stations.csv")
+blr_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Bangalore_1990_2022_BangaloreCity.csv")
+chn_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Chennai_1990_2022_Madras.csv")
+dlhi_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Delhi_NCR_1990_2022_Safdarjung.csv")
+lucknw_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Lucknow_1990_2022.csv")
+mum_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Mumbai_1990_2022_Santacruz.csv")
+geo_data<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Station_GeoLocation_Longitute_Latitude_Elevation_EPSG_4326.csv")
+bhu_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/weather_Bhubhneshwar_1990_2022.csv")
+rourkela_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/weather_Rourkela_2021_2022.csv")
+rajas_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Rajasthan_1990_2022_Jodhpur.csv")
+```
+
+## Exploratory Analysis of datasets
+
+```{r}
 #city_day
 head(city_day)
 summary(city_day)
@@ -74,7 +96,6 @@ city_day$AQI_Bucket <- as.factor(city_day$AQI_Bucket)
 city_day$Date <- as.Date(city_day$Date)
 #str(city_day)
 summary(city_day)
-
 dropcol<-c("PM10", "Toluene", "Benzene", "Xylene")#, "NH3")
 #city_day<-city_day[,dropcol,drop=FALSE]
 city_day<-subset(city_day, select=-c(PM10, Toluene, Benzene, Xylene))#, NH3))
@@ -97,38 +118,89 @@ Benfordness is checked without using Benford.analyis package instead used only b
 ```{r}
 firstDigit<-function(x){
  str_extract(x, "[123456789]")
+  #as.numeric(x)
+  #x=x^2
 }
-major_city_day
-major_city_day_first_digit = apply(major_city_day, 1, firstDigit)
-head(major_city_day_first_digit)
-#first_digit_counts <- as.vector(table(first.digit))
-#first_digit_counts
-```
+BenfordConfirmity<-function(x, y){
+  x=floor(x) + signif(x, 2)
+  if(0.000 <= x && x < 0.006)
+      print(paste(y, "Dataset has Close confirmity with Mean abosolute Deviation", x))
+  else if(0.006 <= x && x < 0.012)
+    print(paste(y , "Dataset has Acceptable confirmity with Mean abosolute Deviation", x))
+  else if(0.012 <= x && x <= 0.015)
+     print(paste(y, "Dataset has Marginally Acceptable confirmity with Mean abosolute Deviation", x))
+  else if(x > 0.015)
+    print(paste(y, "Dataset has no confirmity with Mean abosolute Deviation", x))
+}
+major_city_day_first_digit <-city_day %>% mutate(across(seq(3:13), firstDigit))%>%subset(select=-c(1,2,12))
 
+PM2.5FD_Counts<-as.vector(table(major_city_day_first_digit$PM2.5))
+PM2.5first_digit_actual_vs_expected <- data.frame(
+digit            = 1:9,
+actual.count     = PM2.5FD_Counts,    
+actual.fraction  = PM2.5FD_Counts / nrow(major_city_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+PM2.5first_digit_actual_vs_expected<-PM2.5first_digit_actual_vs_expected %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+PM2.5first_digit_actual_vs_expected
+BenfordConfirmity(mean(PM2.5first_digit_actual_vs_expected$difference.fraction), "PM2.5")
+
+NOFD_Counts<-as.vector(table(major_city_day_first_digit$NO))
+NOfirst_digit_actual_vs_expected <- data.frame(
+digit            = 1:9,
+actual.count     = NOFD_Counts,    
+actual.fraction  = NOFD_Counts / nrow(major_city_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+NOfirst_digit_actual_vs_expected<-NOfirst_digit_actual_vs_expected %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+NOfirst_digit_actual_vs_expected
+BenfordConfirmity(mean(NOfirst_digit_actual_vs_expected$difference.fraction), "NO")
+
+
+O3FD_Counts<-as.vector(table(major_city_day_first_digit$O3))
+O3first_digit_actual_vs_expected <- data.frame(
+digit            = 1:9,
+actual.count     = O3FD_Counts,    
+actual.fraction  = O3FD_Counts / nrow(major_city_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+O3first_digit_actual_vs_expected<-O3first_digit_actual_vs_expected %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+O3first_digit_actual_vs_expected
+BenfordConfirmity(mean(O3first_digit_actual_vs_expected$difference.fraction), "O3")
+
+
+SO2FD_Counts<-as.vector(table(major_city_day_first_digit$SO2))
+SO2first_digit_actual_vs_expected <- data.frame(
+digit            = 1:9,
+actual.count     = SO2FD_Counts,    
+actual.fraction  = SO2FD_Counts / nrow(major_city_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+SO2first_digit_actual_vs_expected<-SO2first_digit_actual_vs_expected %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+SO2first_digit_actual_vs_expected
+BenfordConfirmity(mean(SO2first_digit_actual_vs_expected$difference.fraction), "SO2")
+
+```
 
 ```{r}
 city_day_monthwise<-major_city_day%>%group_by(City, year=year(Date), month = month(Date))%>%summarise(across(c(seq(3:13)), mean, na.rm=TRUE))
 city_day_monthwise
-city_day_monthwise_201819<-city_day_monthwise%>%filter((year==2019) | (year == 2018))
-city_day_monthwise_201819
 ggplot(city_day_monthwise, aes(x=month, y=AQI, color=factor(year))) + geom_line() + facet_wrap(~City) + scale_x_continuous(name ="month", breaks = seq(1, 12, 1))
 
 city_day_yearwise<-major_city_day%>%group_by(City, year=year(Date))%>%summarise(across(c(seq(3:13)), mean, na.rm=TRUE))%>%filter(City %in% c("Ahmedabad", "Chennai", "Bengaluru", "Delhi","Mumbai"))
-city_day_yearwise
+#city_day_yearwise
 ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=PM2.5, color="PM2.5")) + facet_wrap(~City, nrow=5)
 
 ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=NO, color="NO")) + geom_line(aes(y=NO2, color="NO2")) + geom_line(aes(y=NOx, color="NOx"))+ facet_wrap(~City, nrow=5)
 ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=SO2, color="SO2")) + facet_wrap(~City, nrow=5)
 ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=CO, color="CO")) + facet_wrap(~City, nrow=5)
-
 ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=O3, color="O3")) + facet_wrap(~City, nrow=5)
-ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=NH3, color="NH3", na.rm=TRUE)) + facet_wrap(~City, nrow=5)
+ggplot(city_day_yearwise, aes(x=year)) + geom_bar(aes(y=NH3, color=City, na.rm=TRUE)) #+ facet_wrap(~City, nrow=5)
 
 ```
 
 
 ```{r}
-city_hour<-read.csv("./Datasets/Air_Quality/city_hour.csv")
 city_hour
 head(city_hour)
 summary(city_hour)
@@ -148,7 +220,7 @@ tail(city_hour)
 ```
 
 ```{r}
-station_day<-read.csv("./Datasets/Air_Quality/station_day.csv")
+
 nrow(station_day)
 ncol(station_day)
 head(station_day)
@@ -171,7 +243,6 @@ tail(station_day)
 
 
 ```{r}
-station_hour<-read.csv("./Datasets/Air_Quality/station_hour.csv")
 head(station_hour)
 summary(station_hour)
 maxna <-max(rowSums(is.na(station_hour)))
@@ -191,29 +262,19 @@ tail(station_hour)
 
 
 ```{r}
-stations<-read.csv("./Datasets/Air_Quality/stations.csv")
 head(stations)
 summary(stations)
 ```
 
 ```{r}
-blr_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Bangalore_1990_2022_BangaloreCity.csv")
 head(blr_wthr)
-chn_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Chennai_1990_2022_Madras.csv")
 head(chn_wthr)
-dlhi_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Delhi_NCR_1990_2022_Safdarjung.csv")
 head(dlhi_wthr)
-lucknw_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Lucknow_1990_2022.csv")
 head(lucknw_wthr)
-mum_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Mumbai_1990_2022_Santacruz.csv")
 head(mum_wthr)
-geo_data<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Station_GeoLocation_Longitute_Latitude_Elevation_EPSG_4326.csv")
 head(geo_data)
-bhu_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/weather_Bhubhneshwar_1990_2022.csv")
 head(bhu_wthr)
-rourkela_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/weather_Rourkela_2021_2022.csv")
 head(rourkela_wthr)
-rajas_wthr<-read.csv("./Datasets/Temperature_And_Precipitation_Cities_IN/Rajasthan_1990_2022_Jodhpur.csv")
 head(rajas_wthr)
 ```
 
