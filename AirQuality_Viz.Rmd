@@ -5,15 +5,16 @@ date: "10/26/2023"
 output: html_document
 ---
 
-## Objectives
-1. Analysis and comparison of 6 year (2015-2020) Air quality Index  for 5 major cities
-2. Analysis of key pollutants data to see if the dataset confirms to Benford's law to ensure naturalness and quality of dataset
-3. Understanding the correlation between airquality parameters with temperature and precipitation
-4. Analysis of Air quality and temperature through out the day and identify the peaks
-5. Analysis of Airquality of Ahmadabad and different districts over different months for 6 year period
-6. Impact of tree population on the Airquality for Ahmedabad
-7. Understanding the correlation between pollutants and tree population
-8. Predicting air quality for a given year, month and day 
+# Objectives
+With growing population, urbanization and industrialization, particulate pollution is increasingly becoming a biggest concern.As the particulate pollution increases there will be higher level of unhealthy air. Particulate matters are inhalable by humans and can induce various cardiovascular diseases.As various researches indicate other major pollutants and weather could be a precursor for PM2.5 pollution, this data analysis with given air quality data and weather aims at understanding the 2.5 microns particulate matter relation to other major pollutants and their concentration during different seasons in India for major cities. Predicting PM2.5 can help in taking control actions interms of better solid waster management, industrial wastes, increasing the green cover etc. The study will undertake following objectives
+ 
+ 1. Analysis of given key pollutants dataset to check if it confirms to Benford's law for completeness and quality
+ 2. Analysis and comparison of 6 year (2015-2020) Air quality Index  for 4 major cities for different seasons
+ 3. Analysis of different pollutants for major cities over different years 
+ 4. Analysis of different pollutants across different Indian seasons over the day during different hours
+ 5. Understanding the Impact of different pollutants, temperature, season, precipitation on PM2.5
+ 6. Building different prediction model for PM2.5 using key pollutants, weather info and season for major cities using lm and rpart modeling
+ 7. Evaluation and comparison of performance of different models and selecting a optimal one
 
 ```{r}
 knit_print.data.frame = function(x, ...) {
@@ -46,8 +47,12 @@ library(lazyeval)
 library(mosaic)
 library(mosaicData)
 install.packages("Datasets/statisticalModeling_0.3.0.tar.gz", repos = NULL, type = "source")
+install.packages("Datasets/rpart.plot_3.1.1.tar.gz", repos = NULL, type = "source")
 library(statisticalModeling)
+library(rpart)
+library(rpart.plot)
 ```
+
 ```{r}
 city_day<-read.csv("./Datasets/Air_Quality/city_day.csv")
 city_hour<-read.csv("./Datasets/Air_Quality/city_hour.csv")
@@ -102,19 +107,21 @@ city_day<-subset(city_day, select=-c(PM10, Toluene, Benzene, Xylene))#, NH3))
 head(city_day)
 ```
 With the initial glimpse on the city air quality data the following characteristics and anomalies were observed. The dataset contains different Indian cities Air pollutant information, air quality index and air quality bucket or index from year 2015 to 2020. The summary indicates there are incomplete or missing variable values through out the dataset and across different columns.The rows with maximum number of NAs has only the date and city name, those rows may not be useful and can be removed.
-AQI_Bucket has categorical variable and has missing values in various rows and that is not filled with NA and is of type character.The missing information is in different columns but it has useful measurements or values in other rows.This required further analysis if those rows can be dropped or retained. There are rows with AQI and AQI_Bucket but missing values in certain columns, those rows can be retained considering there could be correlated information but with row not have AQI and AQI_Bucket can be considered for dropping.The missing values or null strings can be filled with NA and AQI_Bucket type can be converted to factor. Dropping columns or variables higher than 10% and the variables not required for analysis. Based on this dropping columns PM10, Benzene, Toluene and Xylene.
+AQI_Bucket has categorical variable and has missing values in various rows and that is not filled with NA and is of type character.The missing information is in different columns but it has useful measurements or values in other rows.This requires further analysis if those rows can be dropped or retained. There are rows with AQI and AQI_Bucket but missing values in certain columns, those rows can be retained considering there could be correlated information but the rows without AQI and AQI_Bucket can be considered for dropping.The missing values or null strings can be filled with NA and AQI_Bucket type can be converted to factor. Dropping columns or variables higher than 10% and the variables not required for analysis. Based on this dropping columns PM10, Benzene, Toluene and Xylene.
 
-
-The analysis will only focus on major cities ie Ahmedabad, Chennai, Bhubaneswar, Bengaluru, Delhi, Mumbai and Rajastan. The following dataset processing will focus to extract data only for the interested cities
+The analysis will only focus on major cities ie Bengaluru, Chennai, Delhi and Mumbai. The following dataset processing will focus to extract data only for the interested cities.
+After filtering the Dataset for specific cities, unique cities are checked on the resultant dataset to ensue if it contains only the required.
 
 ```{r}
-major_city_day<-city_day%>%filter(City %in% c("Ahmedabad", "Chennai",  "Bengaluru", "Delhi","Mumbai"))
+major_city_day<-city_day%>%filter(City %in% c("Chennai",  "Bengaluru", "Delhi","Mumbai"))
 summary(major_city_day)
 unique(city_day$City)
 unique(major_city_day$City)
 ```
-## Checking Benfordness of the data set to see if the dataset is complete and usable for analyes
-Benfordness is checked without using Benford.analyis package instead used only basic functions from packages covered under course
+## Benfordness Check of the data set to see if the dataset is complete and usable for analysis
+Benfordness is checked without using Benford.analyis package instead used only basic functions from packages covered under the course.
+In contrary to the belief that the leading digit of a numerical data set 1 through 9 has equal probability, where as Benford's law states that leading digits are distributed in a specific,and nonuniform way.It follows a lograthmic pattern with P(d)=log10(1+1/d), d=1,2..9. This holds true for all naturally or randomly occuring numbers of large dataset. 
+As the airquality data is something which occurs naturally and it random. Benfordness should be holding true for the dataset if it is complete and there are no manipulation.
 ```{r}
 firstDigit<-function(x){
  str_extract(x, "[123456789]")
@@ -166,6 +173,7 @@ benford.fraction = log10(1 + 1 / (1:9))
 )
 O3first_digit_actual_vs_expected<-O3first_digit_actual_vs_expected %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
 O3first_digit_actual_vs_expected
+
 BenfordConfirmity(mean(O3first_digit_actual_vs_expected$difference.fraction), "O3")
 
 
@@ -180,30 +188,79 @@ SO2first_digit_actual_vs_expected<-SO2first_digit_actual_vs_expected %>%mutate(d
 SO2first_digit_actual_vs_expected
 BenfordConfirmity(mean(SO2first_digit_actual_vs_expected$difference.fraction), "SO2")
 
+ggplot(PM2.5first_digit_actual_vs_expected, aes(x=digit, y=benford.fraction))+ geom_col()+ geom_line(aes(y=actual.fraction, color='red')) + scale_x_continuous(name ="digit", breaks = seq(1, 9, 1)) + labs(title = 'Benfordness of PM2.5 in City_day')
 ```
 
+The benfordness check was done on selected pollutants like PM2.5, NO, O3 and SO2. More it was done as random sampling check. As per the check all four data doesnt have enough representation to confirms to Benford's law. "PM2.5 Dataset has no confirmity with Mean abosolute Deviation 0.017"
+"NO Dataset has no confirmity with Mean abosolute Deviation 0.016"
+"O3 Dataset has no confirmity with Mean abosolute Deviation 0.036"
+"SO2 Dataset has no confirmity with Mean abosolute Deviation 0.023"  
+The possible reasons could be lot of missing data, as the source is unknown potentially could have been manipulated or errors in the recording. This might impact the final 
+model which may to require to revisit the data.
+
+## Analysis of AQI across major cities over different months for the period of 2015-2020
 ```{r}
 city_day_monthwise<-major_city_day%>%group_by(City, year=year(Date), month = month(Date))%>%summarise(across(c(seq(3:13)), mean, na.rm=TRUE))
 city_day_monthwise
 ggplot(city_day_monthwise, aes(x=month, y=AQI, color=factor(year))) + geom_line() + facet_wrap(~City) + scale_x_continuous(name ="month", breaks = seq(1, 12, 1))
-
-city_day_yearwise<-major_city_day%>%group_by(City, year=year(Date))%>%summarise(across(c(seq(3:13)), mean, na.rm=TRUE))%>%filter(City %in% c("Ahmedabad", "Chennai", "Bengaluru", "Delhi","Mumbai"))
-#city_day_yearwise
-ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=PM2.5, color="PM2.5")) + facet_wrap(~City, nrow=5)
-
-ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=NO, color="NO")) + geom_line(aes(y=NO2, color="NO2")) + geom_line(aes(y=NOx, color="NOx"))+ facet_wrap(~City, nrow=5)
-ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=SO2, color="SO2")) + facet_wrap(~City, nrow=5)
-ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=CO, color="CO")) + facet_wrap(~City, nrow=5)
-ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=O3, color="O3")) + facet_wrap(~City, nrow=5)
-ggplot(city_day_yearwise, aes(x=year)) + geom_bar(aes(y=NH3, color=City, na.rm=TRUE)) #+ facet_wrap(~City, nrow=5)
-
 ```
+
+AQI over different months for major cities are highly varying. Delhi has very high AQI over 200 different months and even goes above 400 compared to other cities.
+The AQI is high during start of the year and really high during end of the year. Across different cities the common observation over the give years the AQI has improved
+for the respective city AQI benchmarks  and AQI vary across different months. This clearly indicates that seasonal changes and weather has impact on the AQI.
+Mumbai appears to have missing data. 
 
 
 ```{r}
-city_hour
+city_day_yearwise<-major_city_day%>%group_by(City, year=year(Date))%>%summarise(across(c(seq(3:13)), mean, na.rm=TRUE))%>%filter(City %in% c("Ahmedabad", "Chennai", "Bengaluru", "Delhi","Mumbai"))
+#city_day_yearwise
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=PM2.5, color="PM2.5", na.rm=TRUE)) + facet_wrap(~City, nrow=5)
+
+#sggplot(city_day_yearwise, aes(x=year)) + geom_bar(aes(y=NH3, color=City, na.rm=TRUE)) + facet_wrap(~City, nrow=5)
+```
+
+Similar to AQI Delhi has high PM2.5 concentration and next is chennai. Mumbai has low PM2.5 low PM2.5 concentration and no data available for 2015-2017. PM2.5 data
+for Mumbai may be incorrect given urbanization and industrialization in Mumbai.  Bangalore has very low PM2.5 concentration.
+
+```{r}
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=NO, color="NO")) + geom_line(aes(y=NO2, color="NO2")) + geom_line(aes(y=NOx, color="NOx"))+ facet_wrap(~City, nrow=5)
+
+```
+
+Compared to Chennai, Bangalore has high NO, NO2 and NOx concentration.Mumbai also higher concentration than Bangalore and chennai. Delhi similar to AQI and PM2.5, has higher
+concentration on  NO, NO2 and NOx
+
+```{r}
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=SO2, color="SO2")) + facet_wrap(~City, nrow=5)
+
+```
+
+Bangalore has very low SO2 concentration. SO2 concentration is high in both Mumbai and Delhi. 
+
+```{r}
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=CO, color="CO")) + facet_wrap(~City, nrow=5)
+
+```
+
+CO concentraion has reduced over the years for all the cities.
+
+```{r}
+ggplot(city_day_yearwise, aes(x=year)) + geom_line(aes(y=O3, color="O3")) + facet_wrap(~City, nrow=5)
+```
+
+O3 concentration is higher in Delhi. Chennai and Bangalore had more or similar concentration. Mumbai has lowest O3 concentration.
+
+## Analysis of AQI and different pollutants for across major cities for different seasons over the day during different hours using City hour dataset
+```{r}
+#city_hour
 head(city_hour)
-summary(city_hour)
+glimpse(city_hour)
+
+city_hour <- replace(city_hour, city_hour=="", NA)
+ch_na_total_per <-data.frame(colname = names(city_hour),Total_NAs = colSums(is.na(city_hour)), "PerctOfNAs" = colSums((is.na(city_hour)/sum(is.na(city_hour)) * 100)))
+ch_na_total_per
+ggplot(ch_na_total_per, aes(x=colname, y=PerctOfNAs))+geom_col() 
+
 maxna <-max(rowSums(is.na(city_hour)))
 cd_rowswithmaxna<-subset(city_hour, rowSums(is.na(city_hour)) == maxna)
 #cd_rowswithmorena
@@ -217,31 +274,118 @@ city_hour$AQI_Bucket <- as.factor(city_hour$AQI_Bucket)
 summary(city_hour)
 head(city_hour)
 tail(city_hour)
+
 ```
+
+In city hour data set, Xylene, NH3, PM10 has greater 10% of NAs. Other pollutants has nearly 5% of NAs. Remove rows with all NAs and rows with AQI and AQI bucket with NAs.
+Further determining and assigning seasons to every entry in the dataset based on date.
+
 
 ```{r}
+season<-function(date){
+    winter <- as.Date("2012-01-15", format = "%Y-%m-%d") # Winter 
+    spring <- as.Date("2012-02-15",  format = "%Y-%m-%d") # Spring 
+    summer <- as.Date("2012-03-15",  format = "%Y-%m-%d") # Summer 
+    monsoon <- as.Date("2012-06-15",  format = "%Y-%m-%d") # Monsoon
+    autumn <- as.Date("2012-10-15",  format = "%Y-%m-%d") # autumn 
+    prewinter <- as.Date("2012-12-15",  format = "%Y-%m-%d") # prewinter 
 
-nrow(station_day)
-ncol(station_day)
-head(station_day)
-summary(station_day)
-maxna <-max(rowSums(is.na(station_day)))
-cd_rowswithmaxna<-subset(station_day, rowSums(is.na(station_day)) == maxna)
-#cd_rowswithmorena
-head(cd_rowswithmaxna)
-station_day<-subset(city_hour, rowSums(is.na(station_day)) != maxna)
-#station_day
-head(station_day)
-station_day <- replace(station_day, station_day=="", NA)%>% drop_na(AQI_Bucket)
-station_day$AQI_Bucket <- as.factor(station_day$AQI_Bucket)
-#str(station_day)
-summary(station_day)
-head(station_day)
-tail(station_day)
+    # Convert dates from any year to 2012 dates
+    d <- as.Date(strftime(date, format="2012-%m-%d"))
+    
+    ifelse (d >= winter & d < spring, "Winter",
+      ifelse (d >= spring & d < summer, "Spring",
+        ifelse (d >= summer & d < monsoon, "Summer",
+         ifelse (d >= monsoon & d < autumn, "Monsoon",
+            ifelse (d >= autumn & d < prewinter, "Autumn", "Prewinter")))))
+}
+
+#season(as.Date("2015-11-20"))
+#head(city_hour)
+city_hour_sepdt<-city_hour %>% separate(Datetime, c( "Date", "Time"), " ")%>% filter(City %in% c("Chennai", "Bengaluru", "Delhi","Mumbai")) %>%mutate(Season=season(Date), Year = lubridate::year(Date))#%>%select(Year, Season, Time, PM2.5)
+#head(city_hour_sepdt)
 
 ```
 
 
+Change in AQI or pollutant concentration analysis is done for Chennai
+
+```{r}
+city_hour_sepdt_byseason_ch<-city_hour_sepdt %>% filter(Year == 2020 & City == "Chennai") %>%  group_by(City, Year,Season, Time) %>%summarise(across(c(seq(4:18)), mean, na.rm=TRUE)) #%>% summarise(PM2.5_Mean= mean(PM2.5))
+
+city_hour_sepdt_byseason_ch
+ggplot(city_hour_sepdt_byseason_ch, aes(x=Time, y=PM2.5, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ch, aes(x=Time, y=O3, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ch, aes(x=Time, y=NO, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90))# + facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ch, aes(x=Time, y=CO, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ch, aes(x=Time, y=SO2, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ch, aes(x=Time, y=AQI, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+```
+
+
+For Chennai
+  1. PM2.5 peaks from morning till afternoon 1PM and the concentration high during prewinter and winter season. During summer concentration is low.
+  2. O3 is very high during monsoon and high during summer. O3 peaks during the peak hours 9 am to 6 pm.
+  3. CO is very high during monsoon and high during winter. CO peaks first half of the day and drops during second of the day.
+  4. SO2 varies through out the day, high during winter and low during summer.
+  5. AQI is high during monsoon and low during summer and peaks during afternoon till midnight
+  6. NO is high during early morning and low during afternoons. 
+  
+
+```{r}
+city_hour_sepdt_byseason_ah<-city_hour_sepdt %>% filter(Year == 2020 & City == "Bengaluru") %>%  group_by(City, Year,Season, Time) %>%summarise(across(c(seq(4:18)), mean, na.rm=TRUE)) #%>% summarise(PM2.5_Mean= mean(PM2.5))
+
+city_hour_sepdt_byseason_ah
+ggplot(city_hour_sepdt_byseason_ah, aes(x=Time, y=PM2.5, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ah, aes(x=Time, y=O3, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ah, aes(x=Time, y=NO, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90))# + facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ah, aes(x=Time, y=CO, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ah, aes(x=Time, y=SO2, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+
+ggplot(city_hour_sepdt_byseason_ah, aes(x=Time, y=AQI, color=factor(Season))) + geom_point()  + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~City, nrow=5)
+```
+
+
+For Bengaluru
+  1. PM2.5 peaks from morning till afternoon 12PM and the concentration high during spring and winter season. During Monsoon concentraion is low.
+  2. O3 is very high during Spring and high during winter and prewinter. O3 peaks during the peak during afternoon and midnight.
+  3. CO is very high during monsoon and high during winter. CO peaks first half of the day and drops during second of the day.
+  4. AQI drops during early morning and peaks in the afternoon, high during spring and low during monsoon.
+  5. SO2 is high during winter and low during summer and peaks during afternoon till midnight
+  6. NO high during winter and prewinter, peaks during early morning and late night
+
+  
+##Creating combined Data set with Station day and Weather for major cities.
+The below code extract the station Ids for the major cities that are being analyzed. The City name, Season, Year, Latitude, longitude, elevation data are also added to the combined data set for modeling.
+
+
+```{r}
+head(stations)
+summary(stations)
+stations$City
+
+aq_delhi_stations<-stations %>%filter(City=="Delhi")
+aq_delhi_stations
+
+aq_mumbai_stations<-stations %>%filter(City=="Mumbai")
+aq_mumbai_stations
+
+aq_chennai_stations<-stations %>%filter(City=="Chennai")
+aq_chennai_stations
+
+aq_bengaluru_stations<-stations %>%filter(City=="Bengaluru")
+aq_bengaluru_stations
+
+```
 ```{r}
 head(station_hour)
 summary(station_hour)
@@ -249,7 +393,7 @@ maxna <-max(rowSums(is.na(station_hour)))
 cd_rowswithmaxna<-subset(station_hour, rowSums(is.na(station_hour)) == maxna)
 #cd_rowswithmorena
 head(cd_rowswithmaxna)
-station_hour<-subset(city_hour, rowSums(is.na(station_hour)) != maxna)
+station_hour<-subset(station_hour, rowSums(is.na(station_hour)) != maxna)
 #station_hour
 head(station_hour)
 station_hour <- replace(station_hour, station_hour=="", NA)%>% drop_na(AQI_Bucket)
@@ -261,31 +405,783 @@ tail(station_hour)
 ```
 
 
+Extracting the lat, lon and elevation info from geo data. Banglore info was incorrect and it is correct with right values for lat, lon and elevation.
+
+
 ```{r}
-head(stations)
-summary(stations)
+blr_geo<-geo_data %>%filter(Location_Name=="Bangalore")
+blr_geo<-blr_geo%>%mutate(longitude=77.59, Latitude=12.97, Elevation=920)
+chn_geo<-geo_data%>%filter(Location_Name=="Chennai")
+dlhi_geo<-geo_data%>%filter(Location_Name=="Delhi")
+mum_geo<-geo_data%>%filter(Location_Name=="Mumbai")
+bhu_geo<-geo_data%>%filter(Location_Name=="Bhuvaneswar")
+rourkela_geo<-geo_data%>%filter(Location_Name=="Rourkela")
+rajas_geo<-geo_data%>%filter(Location_Name=="Rajastan")
+lucknw_geo<-geo_data%>%filter(Location_Name=="Lucknow")
+
+
 ```
+
+```{r}
+nrow(station_day)
+ncol(station_day)
+head(station_day)
+summary(station_day)
+maxna <-max(rowSums(is.na(station_day)))
+cd_rowswithmaxna<-subset(station_day, rowSums(is.na(station_day)) == maxna)
+#cd_rowswithmorena
+head(cd_rowswithmaxna)
+station_day<-subset(station_day, rowSums(is.na(station_day)) != maxna)
+#station_day
+head(station_day)
+station_day <- replace(station_day, station_day=="", NA)%>% drop_na(AQI_Bucket)
+station_day$AQI_Bucket <- as.factor(station_day$AQI_Bucket)
+#str(station_day)
+summary(station_day)
+head(station_day)
+tail(station_day)
+
+findCity<-function(x)
+{
+  ifelse(x %in% aq_delhi_stations$StationId,"Delhi",
+    ifelse(x %in% aq_mumbai_stations$StationId,"Mumbai",
+     ifelse(x %in% aq_chennai_stations$StationId,"Chennai",
+      ifelse(x %in% aq_bengaluru_stations$StationId,"Bengaluru","Other"))))
+}
+
+station_day_city<-station_day%>%mutate(City=findCity(StationId))
+#station_day_city
+
+major_city_station_day<-station_day_city%>%filter(City %in% c("Chennai",  "Bengaluru", "Delhi","Mumbai"))
+#View(major_city_station_day)
+
+st_na_total_per <-data.frame(colname = names(major_city_station_day),Total_NAs = colSums(is.na(major_city_station_day)), "PerctOfNAs" = colSums((is.na(major_city_station_day)/sum(is.na(major_city_station_day)) * 100)))
+#st_na_total_per
+ggplot(st_na_total_per, aes(x=colname, y=PerctOfNAs))+geom_col()
+
+#major_city_station_day<-major_city_station_day[complete.cases(major_city_station_day),]
+#major_city_station_day
+
+major_city_station_day<-major_city_station_day%>%mutate(Latitude = case_when(City == "Chennai" ~ chn_geo$Latitude, City == "Bengaluru" ~ blr_geo$Latitude, City == "Mumbai" ~ mum_geo$Latitude,City == "Delhi" ~ dlhi_geo$Latitude),Longitude = case_when(City == "Chennai" ~ chn_geo$longitude, City == "Bengaluru" ~ blr_geo$longitude, City == "Mumbai" ~ mum_geo$longitude,City == "Delhi" ~ dlhi_geo$longitude),Elevation = case_when(City == "Chennai" ~ chn_geo$Elevation, City == "Bengaluru" ~ blr_geo$Elevation, City == "Mumbai" ~ mum_geo$Elevation,City == "Delhi" ~ dlhi_geo$Elevation))
+
+#major_city_station_day
+
+```
+station_day data set is cleaned for missing values. Compared to City_day dataset station dataset is better and has less NA values for major pollutants.
+Unwanted pollutants can be removed from combined data set. 
+
+###Performing benfordness check for station_day data set
+
+```{r}
+major_city_station_day_first_digit <-major_city_station_day %>% mutate(across(seq(3:17), firstDigit))#%>%subset(select=-c(1,2,12))
+major_city_station_day_first_digit
+
+PM2.5FD_Counts_stday<-as.vector(table(major_city_station_day_first_digit$PM2.5))
+PM2.5first_digit_actual_vs_expected_stday <- data.frame(
+digit            = 1:9,
+actual.count     = PM2.5FD_Counts_stday,    
+actual.fraction  = PM2.5FD_Counts_stday / nrow(major_city_station_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+PM2.5first_digit_actual_vs_expected_stday<-PM2.5first_digit_actual_vs_expected_stday %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+PM2.5first_digit_actual_vs_expected_stday
+BenfordConfirmity(mean(PM2.5first_digit_actual_vs_expected_stday$difference.fraction), "PM2.5")
+
+AQIFD_Counts_stday<-as.vector(table(major_city_station_day_first_digit$AQI))
+AQIfirst_digit_actual_vs_expected_stday <- data.frame(
+digit            = 1:9,
+actual.count     = AQIFD_Counts_stday,    
+actual.fraction  = AQIFD_Counts_stday / nrow(major_city_station_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+AQIfirst_digit_actual_vs_expected_stday<-AQIfirst_digit_actual_vs_expected_stday %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+AQIfirst_digit_actual_vs_expected_stday
+BenfordConfirmity(mean(AQIfirst_digit_actual_vs_expected_stday$difference.fraction), "AQI")
+
+
+NOFD_Counts_stday<-as.vector(table(major_city_station_day_first_digit$NO))
+NOfirst_digit_actual_vs_expected_stday <- data.frame(
+digit            = 1:9,
+actual.count     = NOFD_Counts_stday,    
+actual.fraction  = NOFD_Counts_stday / nrow(major_city_station_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+NOfirst_digit_actual_vs_expected_stday<-NOfirst_digit_actual_vs_expected_stday %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+NOfirst_digit_actual_vs_expected_stday
+BenfordConfirmity(mean(NOfirst_digit_actual_vs_expected_stday$difference.fraction), "NO")
+
+
+NO2FD_Counts_stday<-as.vector(table(major_city_station_day_first_digit$NO2))
+NO2first_digit_actual_vs_expected_stday <- data.frame(
+digit            = 1:9,
+actual.count     = NO2FD_Counts_stday,    
+actual.fraction  = NO2FD_Counts_stday / nrow(major_city_station_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+NO2first_digit_actual_vs_expected_stday<-NO2first_digit_actual_vs_expected_stday %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+NO2first_digit_actual_vs_expected_stday
+BenfordConfirmity(mean(NO2first_digit_actual_vs_expected_stday$difference.fraction), "NO2")
+
+
+COFD_Counts_stday<-as.vector(table(major_city_station_day_first_digit$CO))
+COfirst_digit_actual_vs_expected_stday <- data.frame(
+digit            = 1:9,
+actual.count     = COFD_Counts_stday,    
+actual.fraction  = COFD_Counts_stday / nrow(major_city_station_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+COfirst_digit_actual_vs_expected_stday<-COfirst_digit_actual_vs_expected_stday %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+COfirst_digit_actual_vs_expected_stday
+BenfordConfirmity(mean(COfirst_digit_actual_vs_expected_stday$difference.fraction), "CO")
+
+
+SO2FD_Counts_stday<-as.vector(table(major_city_station_day_first_digit$SO2))
+SO2first_digit_actual_vs_expected_stday <- data.frame(
+digit            = 1:9,
+actual.count     = SO2FD_Counts_stday,    
+actual.fraction  = SO2FD_Counts_stday / nrow(major_city_station_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+SO2first_digit_actual_vs_expected_stday<-NO2first_digit_actual_vs_expected_stday %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+SO2first_digit_actual_vs_expected_stday
+BenfordConfirmity(mean(SO2first_digit_actual_vs_expected_stday$difference.fraction), "SO2")
+
+
+NOXFD_Counts_stday<-as.vector(table(major_city_station_day_first_digit$NOX))
+NOXfirst_digit_actual_vs_expected_stday <- data.frame(
+digit            = 1:9,
+actual.count     = SO2FD_Counts_stday,    
+actual.fraction  = SO2FD_Counts_stday / nrow(major_city_station_day_first_digit),
+benford.fraction = log10(1 + 1 / (1:9))
+)
+NOXfirst_digit_actual_vs_expected_stday<-NOXfirst_digit_actual_vs_expected_stday %>%mutate(difference.fraction=abs(benford.fraction-actual.fraction))
+NOXfirst_digit_actual_vs_expected_stday
+BenfordConfirmity(mean(NOXfirst_digit_actual_vs_expected_stday$difference.fraction), "NOX")
+
+```
+"PM2.5 Dataset has Acceptable confirmity with Mean abosolute Deviation 0.0083" has accepatable confirmity and "NO Dataset has Close confirmity with Mean abosolute Deviation 0.0058"
+Rest has no conformity with minor variation.
+[1] "AQI Dataset has no confirmity with Mean abosolute Deviation 0.019"
+[1] "NO2 Dataset has no confirmity with Mean abosolute Deviation 0.016"
+[1] "CO Dataset has no confirmity with Mean abosolute Deviation 0.035"
+[1] "SO2 Dataset has no confirmity with Mean abosolute Deviation 0.016"
+[1] "NOX Dataset has no confirmity with Mean abosolute Deviation 0.017"
 
 ```{r}
 head(blr_wthr)
+summary(blr_wthr)
 head(chn_wthr)
+summary(chn_wthr)
 head(dlhi_wthr)
+summary(dlhi_wthr)
 head(lucknw_wthr)
+summary(lucknw_wthr)
 head(mum_wthr)
+summary(mum_wthr)
 head(geo_data)
 head(bhu_wthr)
+summary(bhu_wthr)
 head(rourkela_wthr)
+summary(rourkela_wthr)
 head(rajas_wthr)
+summary(rajas_wthr)
+```
+# Detailed analysis
+
+## Analysis temperature and precipitation over different Seasons for major Cities over different years
+
+```{r}
+bhu_wthr_clnd<-bhu_wthr[complete.cases(bhu_wthr),] %>%filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Bhuvaneswar", Latitude=bhu_geo$Latitude, Longitude=bhu_geo$longitude, Elevation=bhu_geo$Elevation, Season=season(ymd(as.Date(time))))
+#View(bhu_wthr_clnd)
+
+
+rourkela_wthr_clnd<-rourkela_wthr[complete.cases(rourkela_wthr),] %>%filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Rourkela", Latitude=rourkela_geo$Latitude, Longitude=rourkela_geo$longitude, Elevation=rourkela_geo$Elevation, Season=season(ymd(as.Date(time))))
+#View(rourkela_wthr_clnd)
+
+rajas_wthr_clnd<-rajas_wthr[complete.cases(rajas_wthr),]%>%filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Rajasthan", Latitude=rajas_geo$Latitude, Longitude=rajas_geo$longitude, Elevation=rajas_geo$Elevation, Season=season(ymd(as.Date(time))))
+#View(rajas_wthr_clnd)
+rajas_wthr_clnd_seasn<-rajas_wthr_clnd %>% mutate(Year = lubridate::year(as.Date(time, format = "%d-%m-%Y"))) %>% group_by(City, Year, Season) %>% summarise(across(c(2:5), mean, na.rm = TRUE))
+#rajas_wthr_clnd_seasn
+
+lucknw_wthr_clnd<-lucknw_wthr[complete.cases(lucknw_wthr),] %>%filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Lucknow", Latitude=lucknw_geo$Latitude, Longitude=lucknw_geo$longitude, Elevation=lucknw_geo$Elevation, Season=season(ymd(as.Date(time))))
+#View(lucknw_wthr_clnd)
+lucknw_wthr_clnd_seasn<-lucknw_wthr_clnd %>% mutate(Year = lubridate::year(as.Date(time, format = "%d-%m-%Y"))) %>% group_by(City, Year, Season) %>% summarise(across(c(2:5), mean, na.rm = TRUE))
+#lucknw_wthr_clnd_seasn
+
+
+blr_wthr_clnd<-blr_wthr[complete.cases(blr_wthr),] %>% filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Bengaluru", Latitude=blr_geo$Latitude, Longitude=blr_geo$longitude, Elevation=blr_geo$Elevation, Season=season(ymd(as.Date(time))))
+#View(blr_wthr_clnd)
+blr_wthr_clnd_seasn<-blr_wthr_clnd %>% mutate(Year = lubridate::year(as.Date(time, format = "%d-%m-%Y"))) %>% group_by(City,Latitude,Longitude, Elevation,Year, Season) %>% summarise(across(c(2:5), mean, na.rm = TRUE))
+#blr_wthr_clnd_seasn
+names(blr_wthr_clnd_seasn)
+ggplot(blr_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=blr_wthr_clnd_seasn$tmax, color=blr_wthr_clnd_seasn$Season)) + scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(blr_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=blr_wthr_clnd_seasn$tavg, color=blr_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(blr_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=blr_wthr_clnd_seasn$tmin, color=blr_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(blr_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=blr_wthr_clnd_seasn$prcp, color=blr_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+
+
+chn_wthr_clnd<-chn_wthr[complete.cases(chn_wthr),] %>% filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Chennai", Latitude=chn_geo$Latitude, Longitude=chn_geo$longitude, Elevation=chn_geo$Elevation, Season=season(ymd(as.Date(time))))
+#View(chn_wthr_clnd)
+chn_wthr_clnd_seasn<-chn_wthr_clnd %>% mutate(Year = lubridate::year(as.Date(time, format = "%d-%m-%Y"))) %>% group_by(City,Latitude,Longitude, Elevation,Year, Season) %>% summarise(across(c(2:5), mean, na.rm = TRUE))
+#chn_wthr_clnd_seasn
+
+ggplot(chn_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=chn_wthr_clnd_seasn$tmax, color=chn_wthr_clnd_seasn$Season)) + scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(chn_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=chn_wthr_clnd_seasn$tavg, color=chn_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(chn_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=chn_wthr_clnd_seasn$tmin, color=chn_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(chn_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=chn_wthr_clnd_seasn$prcp, color=chn_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+
+
+dlhi_wthr_clnd<-dlhi_wthr[complete.cases(dlhi_wthr),] %>%filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Delhi", Latitude=dlhi_geo$Latitude, Longitude=dlhi_geo$longitude, Elevation=dlhi_geo$Elevation, Season=season(ymd(as.Date(time))))
+#View(dlhi_wthr_clnd)
+dlhi_wthr_clnd_seasn<-dlhi_wthr_clnd %>% mutate(Year = lubridate::year(as.Date(time, format = "%d-%m-%Y"))) %>% group_by(City,Latitude,Longitude, Elevation,Year, Season) %>% summarise(across(c(2:5), mean, na.rm = TRUE))
+#dlhi_wthr_clnd_seasn
+
+ggplot(dlhi_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=dlhi_wthr_clnd_seasn$tmax, color=dlhi_wthr_clnd_seasn$Season)) + scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(dlhi_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=dlhi_wthr_clnd_seasn$tavg, color=dlhi_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(dlhi_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=dlhi_wthr_clnd_seasn$tmin, color=dlhi_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(dlhi_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=dlhi_wthr_clnd_seasn$prcp, color=dlhi_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+
+mum_wthr_clnd<-mum_wthr[complete.cases(mum_wthr),] %>%filter(between(as.Date(time, format = "%d-%m-%Y"), as.Date('31-12-2014', format = "%d-%m-%Y"), as.Date('01-01-2021', format = "%d-%m-%Y")))%>%mutate(City="Mumbai", Latitude=mum_geo$Latitude, Longitude=mum_geo$longitude, Elevation=mum_geo$Elevation, Season=season(ymd(as.Date(time))))
+mum_wthr_clnd_seasn<-mum_wthr_clnd %>% mutate(Year = lubridate::year(as.Date(time, format = "%d-%m-%Y"))) %>% group_by(City,Latitude,Longitude, Elevation,Year, Season) %>% summarise(across(c(2:5), mean, na.rm = TRUE))
+#mum_wthr_clnd_seasn
+
+
+ggplot(mum_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=mum_wthr_clnd_seasn$tmax, color=mum_wthr_clnd_seasn$Season)) + scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(mum_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=mum_wthr_clnd_seasn$tavg, color=mum_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(mum_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=mum_wthr_clnd_seasn$tmin, color=mum_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+ggplot(mum_wthr_clnd_seasn, aes(x=Year))+ geom_line(aes(y=mum_wthr_clnd_seasn$prcp, color=mum_wthr_clnd_seasn$Season))+ scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+
 ```
 
 
 
-## Detailed analysis
+Pattern of tmin, tmax, tavg, and prcp has changed over years.
+
+Chennai - tavg can be higher during summer or monsoon, precipitation is higher summer and prewinter.
+
+Bangalore -tavg mostly ver high during summer but lower than chennai, precipitation is high during autumn or summer
+
+Mumbai-tavg mostly ver high during summer, precipitation is high during monsoon and autumn
+
+Delhi- tavg can be higher during summer or monsoon, precipitation is high during summer, prewinter and monsoon. It has changed over years. 
 
 
 
-## Outcomes
+
+```{r}
+major_city_station_day_seasonwise<-major_city_station_day%>%mutate(Year=lubridate::year(as.Date(Date)), Season=season(as.Date(Date)))%>%group_by(City,Latitude,Longitude, Elevation,Year, Season)%>% summarise(across(c(2:16), mean, na.rm = TRUE))%>%select(-c(4,18))
+#major_city_station_day_seasonwise
+
+list_city_wthr<-list(blr_wthr_clnd_seasn, chn_wthr_clnd_seasn, dlhi_wthr_clnd_seasn, mum_wthr_clnd_seasn)
+major_city_wthr<-Reduce(function(x,y) merge(x, y, all=TRUE), list_city_wthr)
+#major_city_wthr
+     
+major_city_AQ_wthr_pos<-merge(major_city_station_day_seasonwise, major_city_wthr, all=TRUE)
+summary(major_city_AQ_wthr_pos)
+#major_city_AQ_wthr_pos
+major_city_AQ_wthr_pos_clnd<-major_city_AQ_wthr_pos[,-c(7,9,13,17,18,20)]
+#major_city_AQ_wthr_pos_clnd
+
+City_AQ_WTHR_POS<-major_city_AQ_wthr_pos_clnd
+City_AQ_WTHR_POS<-City_AQ_WTHR_POS[!is.na(City_AQ_WTHR_POS$PM2.5),]
+#City_AQ_WTHR_POS
+ggplot(City_AQ_WTHR_POS, aes(x=Year, y=PM2.5, color=Season)) + geom_boxplot(outlier.colour="black", outlier.shape=16,
+             outlier.size=2, notch=FALSE) + scale_x_continuous(name ="year", breaks = seq(2015, 2020, 1))
+
+```
 
 
+Checked if there PM2.5 outliers in the dataset. There are no outliers.
+
+
+
+## Plot of major cities in the map with PM2.5 and AQI
+
+```{r}
+
+cityMap <- City_AQ_WTHR_POS %>% 
+  leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lat = City_AQ_WTHR_POS$Latitude, lng = City_AQ_WTHR_POS$Longitude, weight = 5, color = 'midnightblue', radius = sqrt(City_AQ_WTHR_POS$AQI)) %>%
+  addPopups(lat = City_AQ_WTHR_POS$Latitude, lng = City_AQ_WTHR_POS$Longitude, popup = paste("PM2.5 ", as.character(round(City_AQ_WTHR_POS$PM2.5, 2)),"\n", "AQI ", as.character(round(City_AQ_WTHR_POS$AQI, 2))))
+cityMap
+```
+## Impact of Season, temperature average, precipitation, Elevation, NO, NO2, NOx
+
+NO, NO2, NOx are considered for analysis as the source of these pollutants and PM2.5 are similar and these pollutants may serve as precursor for PM2.5.
+Just to limit the scope of analysis only these pollutants and AQI are considered for modeling. To start with their impacts on PM2.5 are studied.
+
+```{r}
+ggplot(City_AQ_WTHR_POS, aes(x = Season, y = PM2.5, color = AQI, size = NO)) +
+  geom_point(na.rm=TRUE) +
+  labs(title = "Impact of AQI, Season and NO on PM2.5")
+```
+Overall PM2.5 is higher in the order of Autumn, Prewinter and winter with higher AQI and NO. Monsoon are concentration of PM2.5 and NO are lower with low AQI.
+
+
+```{r}
+ggplot(City_AQ_WTHR_POS, aes(x = Season, y = PM2.5, color = AQI, size = NO2)) +
+  geom_point(na.rm=TRUE) +
+  labs(title = "Impact of AQI, Season and NO2 on PM2.5")
+```
+Overall PM2.5 is higher in the order of Autumn, Prewinter and winter with higher AQI and NO2. Monsoon are concentration of PM2.5 and NO2 are lower with low AQI.Summer 
+and spring are moderate
+
+```{r}
+ggplot(City_AQ_WTHR_POS, aes(x = Season, y = PM2.5, color = AQI, size = NOx)) +
+  geom_point(na.rm=TRUE) +
+  labs(title = "Impact of AQI, Season and NOx on PM2.5")
+
+```
+Overall PM2.5 is higher in the order of Autumn, Prewinter and winter with higher AQI and NOx. Monsoon are concentration of PM2.5 and NOx are lower with low AQI.Summer 
+and spring are moderate
+
+```{r}
+ggplot(City_AQ_WTHR_POS, aes(x = Season, y = PM2.5, color = AQI, size = Elevation)) +
+  geom_point(na.rm=TRUE) +
+  labs(title = "Impact of AQI, Season and Elevation on PM2.5")
+
+```
+Higher the elevation PM2.5 is low with low AQI. PM2.5 is generally high during autumns, prewinter and winter. moderate during summer and spring. Monsoons low PM2.5.
+
+```{r}
+ggplot(City_AQ_WTHR_POS, aes(x = Season, y = PM2.5, color = tavg , size = prcp, na.rm=TRUE)) +
+  geom_point(na.rm=TRUE) +
+  labs(title = "Impact of Average Temperature, Season and Precipitation on PM2.5")
+
+```
+Higher the temperature and high precipitation leads to low PM2.5.
+
+
+```{r}
+#city_hour_sepdt
+
+city_hour_test_data<-city_hour_sepdt%>%mutate(Latitude = case_when(City == "Chennai" ~ chn_geo$Latitude, City == "Bengaluru" ~ blr_geo$Latitude, City == "Mumbai" ~ mum_geo$Latitude,City == "Delhi" ~ dlhi_geo$Latitude),Longitude = case_when(City == "Chennai" ~ chn_geo$longitude, City == "Bengaluru" ~ blr_geo$longitude, City == "Mumbai" ~ mum_geo$longitude,City == "Delhi" ~ dlhi_geo$longitude),Elevation = case_when(City == "Chennai" ~ chn_geo$Elevation, City == "Bengaluru" ~ blr_geo$Elevation, City == "Mumbai" ~ mum_geo$Elevation,City == "Delhi" ~ dlhi_geo$Elevation))
+
+major_city_hour_test_data<-city_hour_test_data %>% filter(City %in% c("Chennai",  "Bengaluru", "Delhi","Mumbai"))  
+major_city_hour_test_data
+major_city_hour_test_data1<-major_city_hour_test_data%>% group_by(City,Latitude,Longitude, Elevation,Year, Season) %>% summarise(across(c(3:15), mean, na.rm = TRUE))%>%select(-c(12,16,17,18))
+#major_city_hour_test_data1
+
+major_city_hour_test_data_temp<-merge(major_city_hour_test_data1, major_city_wthr, all=TRUE)
+#major_city_hour_test_data_temp
+
+major_city_hour_test_data_final<-major_city_hour_test_data_temp%>%select(-c(2,3,8,12,13,14,17,18))
+#major_city_hour_test_data_final
+
+head(major_city_hour_test_data_final)
+```
+
+
+## PM2.5 Prediction model
+
+11 different with lm and rpart(22 models) separately trained with different explanatory variables. Combined data set of station_day, weather and geo data of Chennai, Bengaluru, Delhi and mumbai is used for training.
+Combined data with city_day, weather and geo is used as test dataset.
+
+LM Model1: Response Variable: PM2.5 Explanatory Variable(s): NO
+LM Model2: Response Variable: PM2.5 Explanatory Variable(s): NO + Season
+LM Model3: Response Variable: PM2.5 Explanatory Variable(s): NO2 + Season
+LM Model4: Response Variable: PM2.5 Explanatory Variable(s): NOx + Season
+LM Model5: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season
+LM Model6: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg
+LM Model7: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg + prcp
+LM Model8: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + Elevation
+LM Model9: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg + prcp + Elevation
+LM Model10: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg + prcp + Elevation + AQI
+LM Model11: Response Variable: PM2.5 Explanatory Variable(s): AQI
+
+RPART Model1: Response Variable: PM2.5 Explanatory Variable(s): NO
+RPART Model2: Response Variable: PM2.5 Explanatory Variable(s): NO + Season
+RPART Model3: Response Variable: PM2.5 Explanatory Variable(s): NO2 + Season
+RPART Model4: Response Variable: PM2.5 Explanatory Variable(s): NOx + Season
+RPART Model5: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season
+RPART Model6: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg
+RPART Model7: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg + prcp
+RPART Model8: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + Elevation
+RPART Model9: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg + prcp + Elevation
+RPART Model10: Response Variable: PM2.5 Explanatory Variable(s): NO+ NO2 + NOx + Season + tavg + prcp + Elevation + AQI
+RPART Model11: Response Variable: PM2.5 Explanatory Variable(s): AQI
+
+```{r}
+
+
+lmmodel1_NO<-lm(PM2.5~NO, City_AQ_WTHR_POS)
+fmodel(lmmodel1_NO)
+rpartmode11_NO<-rpart(PM2.5~NO, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmode11_NO)
+prp(rpartmode11_NO)
+
+
+lmmodel2_NOSea<-lm(PM2.5~NO+Season, City_AQ_WTHR_POS)
+fmodel(lmmodel2_NOSea)
+rpartmode12_NOSea<-rpart(PM2.5~NO+Season, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmode12_NOSea)
+prp(rpartmode12_NOSea)
+
+
+lmmodel3_NO2Sea<-lm(PM2.5~NO2+Season, City_AQ_WTHR_POS)
+fmodel(lmmodel3_NO2Sea)
+rpartmode13_NO2Sea<-rpart(PM2.5~NO2+Season, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmode13_NO2Sea)
+prp(rpartmode13_NO2Sea)
+
+
+lmmodel4_NOXSea<-lm(PM2.5~NOx+Season, City_AQ_WTHR_POS)
+fmodel(lmmodel4_NOXSea)
+rpartmode14_NOXSea<-rpart(PM2.5~NOx+Season, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmode14_NOXSea)
+prp(rpartmode14_NOXSea)
+
+lmmodel5_NOCombSea<-lm(PM2.5~NO+NO2+NOx+Season, City_AQ_WTHR_POS)
+fmodel(lmmodel5_NOCombSea)
+rpartmode15_NOCombSea<-rpart(PM2.5~NO+NO2+NOx+Season, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmode15_NOCombSea)
+prp(rpartmode15_NOCombSea)
+
+lmmodel6_NOTempCombSea<-lm(PM2.5~NO+NO2+NOx+Season+tavg, City_AQ_WTHR_POS)
+fmodel(lmmodel6_NOTempCombSea)
+rpartmode16_NOTempCombSea<-rpart(PM2.5~NO+NO2+NOx+Season+tavg, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmode16_NOTempCombSea)
+prp(rpartmode16_NOTempCombSea)
+
+lmmodel7_NOTempCombPrcPSea<-lm(PM2.5~NO+NO2+NOx+Season+tavg+prcp, City_AQ_WTHR_POS)
+fmodel(lmmodel7_NOTempCombPrcPSea)
+rpartmodel7_NOTempCombPrcPSea<-rpart(PM2.5~NO+NO2+NOx+Season+tavg+prcp, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmodel7_NOTempCombPrcPSea)
+prp(rpartmodel7_NOTempCombPrcPSea)
+
+lmmodel8_NOCombElevPSea<-lm(PM2.5~NO+NO2+NOx+Season+Elevation, City_AQ_WTHR_POS)
+fmodel(lmmodel8_NOCombElevPSea)
+rpartmodel8_NOCombElevPSea<-rpart(PM2.5~NO+NO2+NOx+NOx+Season+Elevation, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmodel8_NOCombElevPSea)
+prp(rpartmodel8_NOCombElevPSea)
+
+
+lmmodel9_NOTempCombElevPrcpSea<-lm(PM2.5~NO+NO2+NOx+Season+tavg+prcp+Elevation, City_AQ_WTHR_POS)
+fmodel(lmmodel9_NOTempCombElevPrcpSea)
+rpartmodel9_NOTempCombElevPrcpSea<-rpart(PM2.5~NO+NO2+NOx+Season+tavg+prcp+Elevation, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmodel9_NOTempCombElevPrcpSea)
+prp(rpartmodel9_NOTempCombElevPrcpSea)
+
+lmmodel10_NOTempCombElevPrcpSeaAQI<-lm(PM2.5~NO+NO2+NOx+Season+tavg+prcp+Elevation+AQI, City_AQ_WTHR_POS)
+fmodel(lmmodel10_NOTempCombElevPrcpSeaAQI)
+rpartmodel10_NOTempCombElevPrcpSeaAQI<-rpart(PM2.5~NO+NO2+NOx+Season+tavg+prcp+Elevation+AQI, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmodel10_NOTempCombElevPrcpSeaAQI)
+prp(rpartmodel10_NOTempCombElevPrcpSeaAQI)
+
+
+lmmodel11_AQI<-lm(PM2.5~AQI, City_AQ_WTHR_POS)
+fmodel(lmmodel11_AQI)
+rpartmodel11_AQI<-rpart(PM2.5~AQI, data=City_AQ_WTHR_POS, cp=0.01)
+fmodel(rpartmodel11_AQI)
+prp(rpartmodel11_AQI)
+
+```
+
+```{r}
+lmmodel1_output <- data.frame(evaluate_model(lmmodel1_NO, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel1_output<-lmmodel1_output %>% mutate(diff =(lmmodel1_output$PM2.5 - lmmodel1_output$model_output))
+lmmodel1_MSE<-mean((lmmodel1_output$diff)^2, na.rm=TRUE)
+
+rpartmodel1_output <- evaluate_model(rpartmode11_NO, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel1_output<-rpartmodel1_output%>%mutate(diff =(rpartmodel1_output$PM2.5-rpartmodel1_output$model_output))
+rpartmodel1_MSE<-mean((rpartmodel1_output$diff)^2, na.rm=TRUE)
+
+lmmodel2_output <- data.frame(evaluate_model(lmmodel2_NOSea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel2_output<-lmmodel2_output %>% mutate(diff =(lmmodel2_output$PM2.5 - lmmodel2_output$model_output))
+lmmodel2_MSE<-mean((lmmodel2_output$diff)^2, na.rm=TRUE)
+
+rpartmodel2_output <- evaluate_model(rpartmode12_NOSea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel2_output<-rpartmodel2_output%>%mutate(diff =(rpartmodel2_output$PM2.5-rpartmodel2_output$model_output))
+rpartmodel2_MSE<-mean((rpartmodel2_output$diff)^2, na.rm=TRUE)
+
+lmmodel3_output <- data.frame(evaluate_model(lmmodel3_NO2Sea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel3_output<-lmmodel3_output %>% mutate(diff =(lmmodel3_output$PM2.5 - lmmodel3_output$model_output))
+lmmodel3_MSE<-mean((lmmodel3_output$diff)^2, na.rm=TRUE)
+
+rpartmodel3_output <- evaluate_model(rpartmode13_NO2Sea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel3_output<-rpartmodel3_output%>%mutate(diff =(rpartmodel3_output$PM2.5-rpartmodel3_output$model_output))
+rpartmodel3_MSE<-mean((rpartmodel3_output$diff)^2, na.rm=TRUE)
+
+lmmodel4_output <- data.frame(evaluate_model(lmmodel4_NOXSea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel4_output<-lmmodel4_output %>% mutate(diff =(lmmodel4_output$PM2.5 - lmmodel4_output$model_output))
+lmmodel4_MSE<-mean((lmmodel4_output$diff)^2, na.rm=TRUE)
+
+rpartmodel4_output <- evaluate_model(rpartmode14_NOXSea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel4_output<-rpartmodel4_output%>%mutate(diff =(rpartmodel4_output$PM2.5-rpartmodel4_output$model_output))
+rpartmodel4_MSE<-mean((rpartmodel4_output$diff)^2, na.rm=TRUE)
+
+lmmodel5_output <- data.frame(evaluate_model(lmmodel5_NOCombSea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel5_output<-lmmodel5_output %>% mutate(diff =(lmmodel5_output$PM2.5 - lmmodel5_output$model_output))
+lmmodel5_MSE<-mean((lmmodel5_output$diff)^2, na.rm=TRUE)
+
+
+rpartmodel5_output <- evaluate_model(rpartmode15_NOCombSea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel5_output<-rpartmodel5_output%>%mutate(diff =(rpartmodel5_output$PM2.5-rpartmodel5_output$model_output))
+rpartmodel5_MSE<-mean((rpartmodel5_output$diff)^2, na.rm=TRUE)
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Season for training data set", rpartmodel5_MSE))
+
+lmmodel6_output <- data.frame(evaluate_model(lmmodel6_NOTempCombSea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel6_output<-lmmodel6_output %>% mutate(diff =(lmmodel6_output$PM2.5 - lmmodel6_output$model_output))
+lmmodel6_MSE<-mean((lmmodel6_output$diff)^2, na.rm=TRUE)
+
+rpartmodel6_output <- evaluate_model(rpartmode16_NOTempCombSea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel6_output<-rpartmodel6_output%>%mutate(diff =(rpartmodel6_output$PM2.5-rpartmodel6_output$model_output))
+rpartmodel6_MSE<-mean((rpartmodel6_output$diff)^2, na.rm=TRUE)
+
+lmmodel7_output <- data.frame(evaluate_model(lmmodel7_NOTempCombPrcPSea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel7_output<-lmmodel7_output %>% mutate(diff =(lmmodel7_output$PM2.5 - lmmodel7_output$model_output))
+lmmodel7_MSE<-mean((lmmodel7_output$diff)^2, na.rm=TRUE)
+
+rpartmodel7_output <- evaluate_model(rpartmodel7_NOTempCombPrcPSea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel7_output<-rpartmodel7_output%>%mutate(diff =(rpartmodel7_output$PM2.5-rpartmodel7_output$model_output))
+rpartmodel7_MSE<-mean((rpartmodel7_output$diff)^2, na.rm=TRUE)
+
+lmmodel8_output <- data.frame(evaluate_model(lmmodel8_NOCombElevPSea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel8_output<-lmmodel8_output %>% mutate(diff =(lmmodel8_output$PM2.5 - lmmodel8_output$model_output))
+lmmodel8_MSE<-mean((lmmodel8_output$diff)^2, na.rm=TRUE)
+
+rpartmodel8_output <- evaluate_model(rpartmodel8_NOCombElevPSea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel8_output<-rpartmodel8_output%>%mutate(diff =(rpartmodel8_output$PM2.5-rpartmodel8_output$model_output))
+rpartmodel8_MSE<-mean((rpartmodel8_output$diff)^2, na.rm=TRUE)
+
+lmmodel9_output <- data.frame(evaluate_model(lmmodel9_NOTempCombElevPrcpSea, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel9_output<-lmmodel9_output %>% mutate(diff =(lmmodel9_output$PM2.5 - lmmodel9_output$model_output))
+lmmodel9_MSE<-mean((lmmodel9_output$diff)^2, na.rm=TRUE)
+
+rpartmodel9_output <- evaluate_model(rpartmodel9_NOTempCombElevPrcpSea, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel9_output<-rpartmodel9_output%>%mutate(diff =(rpartmodel9_output$PM2.5-rpartmodel9_output$model_output))
+rpartmodel9_MSE<-mean((rpartmodel9_output$diff)^2, na.rm=TRUE)
+
+lmmodel10_output <- data.frame(evaluate_model(lmmodel10_NOTempCombElevPrcpSeaAQI, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel10_output<-lmmodel10_output %>% mutate(diff =(lmmodel10_output$PM2.5 - lmmodel10_output$model_output))
+lmmodel10_MSE<-mean((lmmodel10_output$diff)^2, na.rm=TRUE)
+
+rpartmodel10_output <- evaluate_model(rpartmodel10_NOTempCombElevPrcpSeaAQI, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel10_output<-rpartmodel10_output%>%mutate(diff =(rpartmodel10_output$PM2.5-rpartmodel10_output$model_output))
+rpartmodel10_MSE<-mean((rpartmodel10_output$diff)^2, na.rm=TRUE)
+
+
+lmmodel11_output <- data.frame(evaluate_model(lmmodel11_AQI, City_AQ_WTHR_POS))%>%select(PM2.5, model_output)
+lmmodel11_output<-lmmodel11_output %>% mutate(diff =(lmmodel11_output$PM2.5 - lmmodel11_output$model_output))
+lmmodel11_MSE<-mean((lmmodel11_output$diff)^2, na.rm=TRUE)
+
+rpartmodel11_output <- evaluate_model(rpartmodel11_AQI, City_AQ_WTHR_POS)%>%select(PM2.5, model_output)
+rpartmodel11_output<-rpartmodel11_output%>%mutate(diff =(rpartmodel11_output$PM2.5-rpartmodel11_output$model_output))
+rpartmodel11_MSE<-mean((rpartmodel11_output$diff)^2, na.rm=TRUE)
+
+
+print(paste("MSE of lm model trained with only NO for training data set", lmmodel1_MSE))
+print(paste("MSE of rpart model trained with only NO for training data set", rpartmodel1_MSE))
+print(paste("MSE of lm model trained with only NO + Season for training data set", lmmodel2_MSE))
+print(paste("MSE of rpart model trained with only NO + Season for training data set", rpartmodel2_MSE))
+print(paste("MSE of lm model trained with only NO2 + Season for  training data set", lmmodel3_MSE))
+print(paste("MSE of rpart model trained with only NO2 + Season for training data set", rpartmodel3_MSE))
+print(paste("MSE of lm model trained with only NOX + Season for  training data set", lmmodel4_MSE))
+print(paste("MSE of rpart model trained with only NOX + Season for training data set", rpartmodel4_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Season for  training data set", lmmodel5_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + tempavg + Season for  training data set", lmmodel6_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + tempavg + Season for training data set", rpartmodel6_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + tempavg + Precipitation + Season for  training data set", lmmodel7_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + tempavg +  Precipitation + Season for training data set", rpartmodel7_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Elevation + Season for  training data set", lmmodel8_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Elevation + Season for training data set", rpartmodel8_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season for  training data set", lmmodel9_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season for training data set", rpartmodel9_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season + AQI for  training data set", lmmodel10_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season + AQI for training data set", rpartmodel10_MSE))
+print(paste("MSE of lm model trained with only AQI for  training data set", lmmodel11_MSE))
+print(paste("MSE of rpart model trained with only AQI for training data set", rpartmodel11_MSE))
+```
+
+
+```{r}
+lmmodel1_output <- data.frame(evaluate_model(lmmodel1_NO, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel1_output<-lmmodel1_output %>% mutate(diff =(lmmodel1_output$PM2.5 - lmmodel1_output$model_output))
+lmmodel1_MSE<-mean((lmmodel1_output$diff)^2,na.rm=TRUE)
+
+rpartmodel1_output <- evaluate_model(rpartmode11_NO, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel1_output<-rpartmodel1_output%>%mutate(diff =(rpartmodel1_output$PM2.5-rpartmodel1_output$model_output))
+rpartmodel1_MSE<-mean((rpartmodel1_output$diff)^2,na.rm=TRUE)
+
+lmmodel2_output <- data.frame(evaluate_model(lmmodel2_NOSea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel2_output<-lmmodel2_output %>% mutate(diff =(lmmodel2_output$PM2.5 - lmmodel2_output$model_output))
+lmmodel2_MSE<-mean((lmmodel2_output$diff)^2,na.rm=TRUE)
+
+rpartmodel2_output <- evaluate_model(rpartmode12_NOSea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel2_output<-rpartmodel2_output%>%mutate(diff =(rpartmodel2_output$PM2.5-rpartmodel2_output$model_output))
+rpartmodel2_MSE<-mean((rpartmodel2_output$diff)^2,na.rm=TRUE)
+
+lmmodel3_output <- data.frame(evaluate_model(lmmodel3_NO2Sea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel3_output<-lmmodel3_output %>% mutate(diff =(lmmodel3_output$PM2.5 - lmmodel3_output$model_output))
+lmmodel3_MSE<-mean((lmmodel3_output$diff)^2,na.rm=TRUE)
+
+rpartmodel3_output <- evaluate_model(rpartmode13_NO2Sea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel3_output<-rpartmodel3_output%>%mutate(diff =(rpartmodel3_output$PM2.5-rpartmodel3_output$model_output))
+rpartmodel3_MSE<-mean((rpartmodel3_output$diff)^2,na.rm=TRUE)
+
+lmmodel4_output <- data.frame(evaluate_model(lmmodel4_NOXSea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel4_output<-lmmodel4_output %>% mutate(diff =(lmmodel4_output$PM2.5 - lmmodel4_output$model_output))
+lmmodel4_MSE<-mean((lmmodel4_output$diff)^2,na.rm=TRUE)
+
+rpartmodel4_output <- evaluate_model(rpartmode14_NOXSea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel4_output<-rpartmodel4_output%>%mutate(diff =(rpartmodel4_output$PM2.5-rpartmodel4_output$model_output))
+rpartmodel4_MSE<-mean((rpartmodel4_output$diff)^2,na.rm=TRUE)
+
+lmmodel5_output <- data.frame(evaluate_model(lmmodel5_NOCombSea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel5_output<-lmmodel5_output %>% mutate(diff =(lmmodel5_output$PM2.5 - lmmodel5_output$model_output))
+lmmodel5_MSE<-mean((lmmodel5_output$diff)^2,na.rm=TRUE)
+
+
+rpartmodel5_output <- evaluate_model(rpartmode15_NOCombSea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel5_output<-rpartmodel5_output%>%mutate(diff =(rpartmodel5_output$PM2.5-rpartmodel5_output$model_output))
+rpartmodel5_MSE<-mean((rpartmodel5_output$diff)^2,na.rm=TRUE)
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Season for test data set", rpartmodel5_MSE))
+
+lmmodel6_output <- data.frame(evaluate_model(lmmodel6_NOTempCombSea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel6_output<-lmmodel6_output %>% mutate(diff =(lmmodel6_output$PM2.5 - lmmodel6_output$model_output))
+lmmodel6_MSE<-mean((lmmodel6_output$diff)^2,na.rm=TRUE)
+
+rpartmodel6_output <- evaluate_model(rpartmode16_NOTempCombSea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel6_output<-rpartmodel6_output%>%mutate(diff =(rpartmodel6_output$PM2.5-rpartmodel6_output$model_output))
+rpartmodel6_MSE<-mean((rpartmodel6_output$diff)^2,na.rm=TRUE)
+
+lmmodel7_output <- data.frame(evaluate_model(lmmodel7_NOTempCombPrcPSea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel7_output<-lmmodel7_output %>% mutate(diff =(lmmodel7_output$PM2.5 - lmmodel7_output$model_output))
+lmmodel7_MSE<-mean((lmmodel7_output$diff)^2,na.rm=TRUE)
+
+rpartmodel7_output <- evaluate_model(rpartmodel7_NOTempCombPrcPSea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel7_output<-rpartmodel7_output%>%mutate(diff =(rpartmodel7_output$PM2.5-rpartmodel7_output$model_output))
+rpartmodel7_MSE<-mean((rpartmodel7_output$diff)^2,na.rm=TRUE)
+
+lmmodel8_output <- data.frame(evaluate_model(lmmodel8_NOCombElevPSea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel8_output<-lmmodel8_output %>% mutate(diff =(lmmodel8_output$PM2.5 - lmmodel8_output$model_output))
+lmmodel8_MSE<-mean((lmmodel8_output$diff)^2,na.rm=TRUE)
+
+rpartmodel8_output <- evaluate_model(rpartmodel8_NOCombElevPSea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel8_output<-rpartmodel8_output%>%mutate(diff =(rpartmodel8_output$PM2.5-rpartmodel8_output$model_output))
+rpartmodel8_MSE<-mean((rpartmodel8_output$diff)^2,na.rm=TRUE)
+
+lmmodel9_output <- data.frame(evaluate_model(lmmodel9_NOTempCombElevPrcpSea, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel9_output<-lmmodel9_output %>% mutate(diff =(lmmodel9_output$PM2.5 - lmmodel9_output$model_output))
+lmmodel9_MSE<-mean((lmmodel9_output$diff)^2,na.rm=TRUE)
+
+rpartmodel9_output <- evaluate_model(rpartmodel9_NOTempCombElevPrcpSea, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel9_output<-rpartmodel9_output%>%mutate(diff =(rpartmodel9_output$PM2.5-rpartmodel9_output$model_output))
+rpartmodel9_MSE<-mean((rpartmodel9_output$diff)^2,na.rm=TRUE)
+
+
+lmmodel10_output <- data.frame(evaluate_model(lmmodel10_NOTempCombElevPrcpSeaAQI, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel10_output<-lmmodel10_output %>% mutate(diff =(lmmodel10_output$PM2.5 - lmmodel10_output$model_output))
+lmmodel10_MSE<-mean((lmmodel10_output$diff)^2, na.rm=TRUE)
+
+rpartmodel10_output <- evaluate_model(rpartmodel10_NOTempCombElevPrcpSeaAQI, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel10_output<-rpartmodel10_output%>%mutate(diff =(rpartmodel10_output$PM2.5-rpartmodel10_output$model_output))
+rpartmodel10_MSE<-mean((rpartmodel10_output$diff)^2, na.rm=TRUE)
+
+lmmodel11_output <- data.frame(evaluate_model(lmmodel11_AQI, major_city_hour_test_data_final))%>%select(PM2.5, model_output)
+lmmodel11_output<-lmmodel11_output %>% mutate(diff =(lmmodel11_output$PM2.5 - lmmodel11_output$model_output))
+lmmodel11_MSE<-mean((lmmodel11_output$diff)^2, na.rm=TRUE)
+
+rpartmodel11_output <- evaluate_model(rpartmodel11_AQI, major_city_hour_test_data_final)%>%select(PM2.5, model_output)
+rpartmodel11_output<-rpartmodel11_output%>%mutate(diff =(rpartmodel11_output$PM2.5-rpartmodel11_output$model_output))
+rpartmodel11_MSE<-mean((rpartmodel11_output$diff)^2, na.rm=TRUE)
+
+print(paste("MSE of lm model trained with only NO for test data set", lmmodel1_MSE))
+print(paste("MSE of rpart model trained with only NO for test data set", rpartmodel1_MSE))
+print(paste("MSE of lm model trained with only NO + Season for test data set", lmmodel2_MSE))
+print(paste("MSE of rpart model trained with only NO + Season for test data set", rpartmodel2_MSE))
+print(paste("MSE of lm model trained with only NO2 + Season for  test data set", lmmodel3_MSE))
+print(paste("MSE of rpart model trained with only NO2 + Season for test data set", rpartmodel3_MSE))
+print(paste("MSE of lm model trained with only NOX + Season for  test data set", lmmodel4_MSE))
+print(paste("MSE of rpart model trained with only NOX + Season for test data set", rpartmodel4_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Season for  test data set", lmmodel5_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + tempavg + Season for  test data set", lmmodel6_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + tempavg + Season for test data set", rpartmodel6_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + tempavg + Precipitation + Season for  test data set", lmmodel7_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + tempavg +  Precipitation + Season for test data set", rpartmodel7_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Elevation + Season for  test data set", lmmodel8_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Elevation + Season for test data set", rpartmodel8_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season for  test data set", lmmodel9_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season for test data set", rpartmodel9_MSE))
+print(paste("MSE of lm model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season + AQI for  test data set", lmmodel10_MSE))
+print(paste("MSE of rpart model trained with only NO + NO2 + NOx + Temp avg + Precipitation + Elevation + Season + AQI for test data set", rpartmodel10_MSE))
+print(paste("MSE of lm model trained with only AQI for  test data set", lmmodel11_MSE))
+print(paste("MSE of rpart model trained with only AQI for test data set", rpartmodel11_MSE))
+
+
+```
+# Outcomes
+Outcomes for the objectives and analysis performed.
+
+##1. Benford's law Conformity Check: 
+     Benford's law conformity check function was implemented with basic functions. Comparing the actual probability of each leading digits with Benford's probability.
+     Due to incompleteness of the dataset available, most of the data set didnt confirm to Benfordness. station_day dataset had few of the pollutants data with close or acceptable confirmity.
+      
+##2. AQI of Bengaluru, Chennai, Delhi and Mumbai for the period 2015-2020:
+   With city_day dataset, averaged over months and plotted AQI for over different months over the years. Using graph visualization, drawn inferences.
+    
+##3. Analysis of different pollutants for major cities over different years:
+   With city_day dataset, plotted pollutants for different years. With graphs, derived the inferences.
+ 
+##4. Analysis of different pollutants across different Indian seasons over the day during different hours:
+   With station_day cleaned and benfordness checked dataset, plotted graphs for chennai and Bengaluru over different hours for the day and derived inferences for pollutants with different graphs
+    
+##5. Understanding the Impact of different pollutants, temperature, season, precipitation on PM2.5:
+  Created a combined data set with cleaned station_day, wether and geodata plotted different graphs to study the relation or impact other variables over PM2.5.Able to derive clear inferences.
+  
+##6. Building different prediction model for PM2.5 using key pollutants, weather info and season for major cities using lm and rpart modeling:
+  Built 22 different models using lm and rpart with different set explanatory variables set (1. NO, 2. NO + Season,3.NO2 + Season, 4.NOx + Season, 5.NO+ NO2 + NOx + Season, 6.NO+ NO2 + NOx + Season + tavg, 7.NO+ NO2 + NOx + Season + tavg + prcp,8. NO+ NO2 + NOx + Season + Elevation, 9.NO+ NO2 + NOx + Season + tavg + prcp + Elevation, 10.NO+ NO2 + NOx + Season + tavg + prcp + Elevation + AQI, 11.AQI). The model is evaluated using both training data set and test set. The test data was prepared by combining cleaned city_day, wethear and geo info of major cities. MSE error for each of the model prediction calculated and stored for comparison. fmodel and prp graphs were plotted for study.
+  
+  
+##7. Evaluation and comparison of performance of different models and selecting a optimal one:
+  Comparing all the model results and MSE of each of the 22 model trained using LM and RPART, the model trained using explanatory variables NO+ NO2 + NOx + Season + tavg + prcp + Elevation + AQ yield better results. The below graph show actual vs prediction for both lm model and rpart model. lm model had MSE of 188.852974998694 for test data set and 106.871067357215 for training dataset.
+
+```{r}
+#lmmodel10_output
+ggplot(lmmodel10_output, aes(x=model_output, y= PM2.5)) +
+  geom_point(na.rm=TRUE) +
+  geom_abline(intercept=0, slope=1) +
+  labs(x='Predicted Values', y='Actual Values', title='LMPredictedvsActual\nNO+NO2+NOx+Tempavg+Precipitation+Elevation+Season+AQI')
+
+ggplot(rpartmodel10_output, aes(x=model_output, y= PM2.5)) +
+  geom_point(na.rm=TRUE) +
+  geom_abline(intercept=0, slope=1) +
+  labs(x='Predicted Values', y='Actual Values', title='RPARTPredictedvsActual\nNO+NO2+NOx+Tempavg+Precipitation+Elevation+Season+AQI')
+```
 
 ## Results and Discussions
+Results and inferences
+
+##1. Benford's law Conformity Check: 
+      PM2.5, AQI and few other pollutants data from city_day and station_day was checked for Benfordness.PM2.5 from station_day dataset had acceptable conformity and NO from station_day had close conformity. Rest of the data failed the Benfordness check as there were lot of missing info. This could have impacted the modeling. Hence used station_day dataset for training as it was better than city_day data. Used city_day dataset as test set.
+      
+##2. AQI of Bengaluru, Chennai, Delhi and Mumbai for the period 2015-2020:
+    AQI over different months for major cities for the years(2015-2020) were highly varying. Delhi had very high AQI compared to other cities. Chennai and Bangalore almost similar AQI. The AQI is high during start of the year and really high during end of the year. Across different cities the common observation over the given years is that the AQI has improved for the respective city AQI benchmarks compare to past. The AQI is been varying across different months. This clearly indicated that seasonal changes and weather has impact on the AQI.
+    
+##3. Analysis of different pollutants for major cities over different years:
+   Delhi has high AQI and higher concentration of pollutants for the given period. Bangalore has low concentration of PM2.5 and SO2. Mumbai has higher concentraion 
+ of NO, NO2 and NOx than Chennai and Bangalore. Chennai PM2.5 and other pollutant concentraion is neither high or less compared to other cities. CO concentration has reduced 
+ in all cities over the years. Mumbai has lowest O3 concentration. PM2.5 data Mumbai doesnt appear to be reliable as is unusually low.
+ 
+##4. Analysis of different pollutants across different Indian seasons over the day during different hours:
+    Chennai has low PM2.5 concentration during summer whereas Bengaluru has low concentration during monsoon. PM2.5 is high during morning hours till afternoon.  Chennai has high O3 concentration during monsoon and summer whereas Bengaluru has during Spring and prewinter. O3 is high through the day for chennai but for Bengaluru peaks durign mid night   and afternoon. For both Chennai and Bengaluru, CO is very high during monsoon and high during winter and it peaks first half of the day and drops during second of the day.NO is high during early morning and low during afternoons for Chennai and Bengaluru it peaks during early morning and late night. Bengaluru has high NO during winter and prewinter.SO2 varies through out the day, high during winter and low during summer for Chennai and for both Chennai and Bengaluru.SO2 varies through out the day for Chennai and Bengaluru. AQI is high during monsoon and low during summer and peaks during afternoon till midnight for Chennai.  For Bengaluru, AQI drops during early morning and peaks in the afternoon, high during spring and low during monsoon.
+    
+##5. Understanding the Impact of different pollutants, temperature, season, precipitation on PM2.5:
+  PM2.5 is higher in the order (Highest, Higher, High) seasons of Autumn, Prewinter and Winter. During Monsoons, PM2.5 is generally lowest with low NO,AQI, NOx, and NO2. 
+Higher temperature, precipitation and elevation has associated low PM2.5.
+##6. Building different prediction model for PM2.5 using key pollutants, weather info and season for major cities using lm and rpart modeling:
+  Built 22 different models using lm and rpart with different set explanatory variables set (1. NO, 2. NO + Season,3.NO2 + Season, 4.NOx + Season, 5.NO+ NO2 + NOx + Season, 6.NO+ NO2 + NOx + Season + tavg, 7.NO+ NO2 + NOx + Season + tavg + prcp,8. NO+ NO2 + NOx + Season + Elevation, 9.NO+ NO2 + NOx + Season + tavg + prcp + Elevation, 10.NO+ NO2 + NOx + Season + tavg + prcp + Elevation + AQI, 11.AQI). The model is evaluated using both training data set and test set. The test data was prepared by combining cleaned city_day, wethear and geo info of major cities. MSE error for each of the model prediction calculated and stored for comparison. lm models were performing better than the rpart model.
+  
+  
+##7. Evaluation and comparison of performance of different models and selecting a optimal one:
+  Comparing all the model results and MSE of each of the 22 model trained using LM and RPART, the model trained using explanatory variables NO+ NO2 + NOx + Season + tavg + prcp + Elevation + AQ yield better results. lm model had MSE of 188.852974998694 for test data set and 106.871067357215 for training dataset.
+  
+##8.Future Work: 
+  The following objectives were not taken due to lack of suitable dataset and these can be considered for future work
+  1. Not all major pollutants are correlated with PM2.5, further analysis can be performed to build further optimal and cities related parameters like lat, lan, populatio, mobility, solid waste etc.
+  2. This can analysis can be further extended to see if there could be impact of green cover or tree census growth over the years on PM2.5 as trees play an important role in
+  purifying air.
+  3. Study can be done to predict cardio vascular incidence in a give city with give pollutants details. 
+  
+
